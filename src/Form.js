@@ -30,8 +30,10 @@ const GET_ISSUES_OF_REPOSITORY = `
       name
       url
       repository(name: $repository) {
+        id
         name
         url
+        viewerHasStarred
 				 issues(first: 5, after: $cursor, states : [OPEN]) {
           edges {
             node {
@@ -59,6 +61,43 @@ const GET_ISSUES_OF_REPOSITORY = `
   }
 `;
 
+const ADD_STAR = `
+  mutation ($repositoryId: ID!) {
+    addStar(input:{starrableId:$repositoryId}) {
+      starrable {
+        viewerHasStarred
+      }
+    }
+  }
+`;
+
+const addStarToRepository = repositoryId => {
+  return fetchData.post('', {
+    query: ADD_STAR,
+    variables: {repositoryId}
+  })
+}
+
+const resolveStarMutation = mutationResult=> state => {
+  const {
+    viewerHasStarred
+  } = mutationResult.data.data.addStar.starrable
+  const {totalCount} = state.organization.repository.stargazers
+
+  return {
+    ...state,
+    organization: {
+      ...state.organization, 
+      repository: {
+        ...state.organization.repository,
+        viewerHasStarred,
+        stargazers: {
+          totalCount: totalCount + 1
+        }
+      }
+    }
+  }
+}
 
 class Form extends React.Component {
   state = {
@@ -95,7 +134,12 @@ class Form extends React.Component {
     } = this.state.organization.repository.issues.pageInfo
     this.fetchFromGithub(this.state.path, endCursor)
   }
-  
+
+  onStarRepository = (repositoryId, viewerHasStarred) => {
+    addStarToRepository(repositoryId).then(mutationResult => 
+    this.setState(resolveStarMutation(mutationResult)))
+  }
+
 
   render() {
     const {path, organization, errors} = this.state
@@ -117,7 +161,7 @@ class Form extends React.Component {
         <hr></hr>
         {
         organization ? (
-        <Organization organization={organization} errors={errors} onFetchMoreIssues={this.onFetchMoreIssues} />
+        <Organization organization={organization} errors={errors} onFetchMoreIssues={this.onFetchMoreIssues} onStarRepository={this.onStarRepository} />
         ) : (
           <p>Silahkan masukkan organisasi/repository</p>
         )
